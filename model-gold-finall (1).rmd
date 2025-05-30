@@ -1,0 +1,371 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+
+```
+
+
+```{r}
+
+install.packages("stargazer")
+install.packages("xtable")
+install.packages("dplyr")
+install.packages("readxl")
+install.packages("whitestrap")
+install.packages("tseries")
+
+library(stargazer)
+library(xtable)
+library(dplyr)
+library(readxl)
+
+##biblioteki testowe
+library(lmtest)
+library(tseries)
+library(whitestrap)
+
+dane_gold <- data_model
+
+```
+
+##Pierwsza postać modelu
+```{r}
+
+Y <- dane_gold$`Cena złota (USD/oz)`
+X1 <- dane_gold$`roczna inflacja USA (%)`
+X2 <- dane_gold$`Roczne stopy procentowe USA (%)`
+X3 <- dane_gold$`Cena srebra (USD/oz)`
+X4 <- dane_gold$`Cena miedzi (USD/100oz)`
+X5 <- dane_gold$`Cena ropy (USD/baryłka)`
+X6 <- dane_gold$`Rezerwy złota banków centralnych (w tysiącach ton)`
+X7 <- dane_gold$`Wartości indeksu VIX (USD)`
+X8 <- dane_gold$`Wartość US Dollar Index (USD)`
+X9 <- dane_gold$`Popyt  na złoto w etf (tony)`
+X10 <- dane_gold$`średnia roczna rentowność 10-letnich obligacji w USA (%)`
+
+
+##Pierwsza postać przed regresją krokową wstecz
+model <- lm(Y ~ X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10)
+
+xtable(summary(model))
+```
+
+
+##Regresja krokowa
+```{r}
+
+#---------#
+##Krok 1
+summary(model)
+
+#najwyzsze p-value ma X7 wiec model1 jest bez x7
+
+model1 <- model <- lm(Y ~ X1 + X2 + X3 + X4 + X5 + X6 + X8 + X9 + X10)
+xtable(summary(model1))
+
+#---------#
+##Krok 2
+summary(model1)
+
+#Wypada X2
+model2 <- lm(Y ~ X1 + X3 + X4 + X5 + X6 + X8 + X9 + X10)
+xtable(summary(model2))
+
+
+
+#---------#
+##Krok 3
+summary(model2)
+
+#wypada X5
+model3 <- lm(Y ~ X1 + X3 + X4 + X6 + X8 + X9 + X10)
+xtable(summary(model3))
+
+#---------#
+##Krok 4
+summary(model3)
+
+#wypada x1
+model4 <- lm(Y ~ X3 + X4 + X6 + X8 + X9 + X10)
+xtable(summary(model4))
+
+#---------#
+##Krok 5
+summary(model4)
+
+#wypada x9
+model5 <- lm(Y ~ X3 + X4 + X6 + X8 + X10)
+xtable(summary(model5))
+
+#---------#
+##Krok 6
+summary(model5)
+
+
+
+#Wszystkie zmienne istotne, a więc jest to ostateczna postać modelu poddawana testom
+```
+
+```{r}
+# Załadowanie pakietu lmtest
+library(lmtest)
+
+# Test Durbin-Watsona
+dw_result <- dwtest(model5)
+
+# Konwersja wyniku testu do ramki danych
+df_result <- data.frame(
+  Statistic = dw_result$statistic,
+  P_value = dw_result$p.value,
+  Method = dw_result$method,
+  Alternative = dw_result$alternative
+)
+
+# Konwersja do tabeli LaTeX
+latex_table <- xtable(df_result, caption = "Wyniki testu Durbin-Watsona")
+
+# Wyświetlenie w formacie LaTeX
+print(latex_table, type = "latex", include.rownames = FALSE)
+```
+
+
+```{r}
+
+
+library(lmtest)
+library(xtable)
+
+# RESET test
+reset_test <- resettest(model5)
+
+# Ręczne przygotowanie danych
+df_reset <- data.frame(
+  Test = "RESET",
+  Statistic = round(reset_test$statistic, 4),
+  DF = if (!is.null(reset_test$parameter)) reset_test$parameter else NA,
+  P_value = round(reset_test$p.value, 4),
+  Method = reset_test$method,
+  Alternative = "Model jest błędnie określony (np. brak zmiennych lub złe założenia)"
+)
+
+# Konwersja do LaTeX
+latex_reset <- xtable(df_reset, caption = "Wyniki testu RESET")
+
+# Wydruk jako LaTeX
+print(latex_reset, type = "latex", include.rownames = FALSE)
+
+
+```
+
+
+```{r}
+install.packages("ggplot2")
+library(ggplot2)
+
+# Dane testu RESET (przykład, podstaw swoje wartości z reset_test)
+df_reset <- data.frame(
+  Test = "RESET",
+  Statistic = as.numeric(reset_test$statistic),
+  P_value = as.numeric(reset_test$p.value)
+)
+
+# Prosty wykres słupkowy statystyki testu z oznaczeniem p-value
+ggplot(df_reset, aes(x = Test, y = Statistic, fill = P_value < 0.05)) +
+  geom_bar(stat = "identity", width = 0.5) +
+  geom_text(aes(label = paste0("p = ", round(P_value, 4))), vjust = -0.5) +
+  scale_fill_manual(values = c("TRUE" = "red", "FALSE" = "green"), 
+                    labels = c("TRUE" = "Odrzucamy H0", "FALSE" = "Brak podstaw do odrzucenia")) +
+  labs(title = "Wynik testu RESET", y = "Statystyka testu", x = "") +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+```
+
+```{r}
+
+library(whitestrap)
+library(xtable)
+
+# Wykonanie testu
+white_result <- white_test(model5)
+
+# Tworzenie ramki danych ręcznie
+df_white <- data.frame(
+  Test = "White",
+  Statistic = round(white_result$w_stat, 4),
+  P_value = round(white_result$p_value, 4),
+  Method = "White test (whitestrap)",
+  Alternative = "Wariancja składnika losowego nie jest stała"
+)
+
+# Konwersja do LaTeX
+latex_white <- xtable(df_white, caption = "Wyniki testu White’a (heteroskedastyczność)")
+
+# Wydruk do LaTeX
+print(latex_white, type = "latex", include.rownames = FALSE)
+
+
+
+```
+```{r}
+library(ggplot2)
+
+# Dane testu White'a
+df_white <- data.frame(
+  Test = "White",
+  Statistic = as.numeric(white_result$w_stat),
+  P_value = as.numeric(white_result$p_value)
+)
+
+# Wykres słupkowy statystyki testu White’a z oznaczeniem p-value
+ggplot(df_white, aes(x = Test, y = Statistic, fill = P_value < 0.05)) +
+  geom_bar(stat = "identity", width = 0.5) +
+  geom_text(aes(label = paste0("p = ", round(P_value, 4))), vjust = -0.5) +
+  scale_fill_manual(values = c("TRUE" = "red", "FALSE" = "green"),
+                    labels = c("TRUE" = "Odrzucamy H0", "FALSE" = "Brak podstaw do odrzucenia")) +
+  labs(title = "Wynik testu White’a (heteroskedastyczność)", y = "Statystyka testu", x = "") +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+```
+
+
+
+```{r}
+library(tseries)
+library(xtable)
+
+# Wykonanie testu Jarque-Bera na residuals modelu
+jb_test <- jarque.bera.test(residuals(model5))
+
+library(tseries)
+library(xtable)
+
+jb_test <- jarque.bera.test(residuals(model5))
+
+df_jb <- data.frame(
+  Test = "Jarque-Bera",
+  Statistic = round(unname(jb_test$statistic), 4),  # unname, bo jest nazwa "X-squared"
+  DF = unname(jb_test$parameter),                  # unname, bo jest nazwa "df"
+  P_value = round(jb_test$p.value, 4),
+  Method = jb_test$method,
+  Alternative = "Reszty nie są normalnie rozłożone"  # wpisz alternatywę ręcznie
+)
+
+latex_jb <- xtable(df_jb, caption = "Wyniki testu Jarque-Bera (normalność reszt)")
+
+print(latex_jb, type = "latex", include.rownames = FALSE)
+
+
+```
+
+```{r}
+library(ggplot2)
+
+# Dane testu Jarque-Bera
+df_jb <- data.frame(
+  Test = "Jarque-Bera",
+  Statistic = as.numeric(unname(jb_test$statistic)),
+  P_value = as.numeric(jb_test$p.value)
+)
+
+# Wykres słupkowy statystyki testu JB z p-value
+ggplot(df_jb, aes(x = Test, y = Statistic, fill = P_value < 0.05)) +
+  geom_bar(stat = "identity", width = 0.5) +
+  geom_text(aes(label = paste0("p = ", round(P_value, 4))), vjust = -0.5) +
+  scale_fill_manual(values = c("TRUE" = "red", "FALSE" = "green"),
+                    labels = c("TRUE" = "Odrzucamy H0", "FALSE" = "Brak podstaw do odrzucenia")) +
+  labs(title = "Wynik testu Jarque-Bera (normalność reszt)", y = "Statystyka testu", x = "") +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+```
+
+```{r}
+summary(model5)$coefficients
+formula(model5)
+names(model5$model)
+
+```
+
+```{r}
+
+
+last_year_data <- tail(dane_gold, 1)
+
+
+new_data <- data.frame(
+  X3 = last_year_data$`Cena srebra (USD/oz)`,
+  X4 = last_year_data$`Cena miedzi (USD/100oz)`,
+  X6 = last_year_data$`Rezerwy złota banków centralnych (w tysiącach ton)`,
+  X8 = last_year_data$`Wartość US Dollar Index (USD)`,
+  X10 = last_year_data$`średnia roczna rentowność 10-letnich obligacji w USA (%)`
+)
+
+
+predicted_Y <- predict(model5, newdata = new_data)
+
+print(predicted_Y)
+
+```
+
+
+
+```{r}
+library(ggplot2)
+
+
+reszty <- residuals(model5)
+
+
+mean_res <- mean(reszty)
+sd_res <- sd(reszty)
+
+
+df_reszty <- data.frame(reszty = reszty)
+
+
+ggplot(df_reszty, aes(x = reszty)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "skyblue", color = "black", alpha = 0.7) +
+  stat_function(fun = dnorm, args = list(mean = mean_res, sd = sd_res), color = "red", size = 1.2) +
+  labs(title = "Histogram reszt z dopasowaną krzywą normalną",
+       x = "Reszty",
+       y = "Gęstość") +
+  theme_minimal()
+
+```
+
+
+```{r}
+library(ggplot2)
+
+reszty <- residuals(model5)
+mean_res <- mean(reszty)
+sd_res <- sd(reszty)
+
+df_reszty <- data.frame(reszty = reszty)
+
+ggplot(df_reszty, aes(x = reszty)) +
+  geom_density(fill = "lightblue", alpha = 0.6) +
+  stat_function(fun = dnorm, args = list(mean = mean_res, sd = sd_res), 
+                color = "red", size = 1) +
+  labs(title = "Gęstość rozkładu reszt z krzywą normalną",
+       x = "Reszty",
+       y = "Gęstość") +
+  theme_minimal()
+
+```
+```{r}
+
+reszty <- residuals(model5)
+
+# Zapis do png
+png("qqplot_reszt.png", width = 800, height = 600)
+qqnorm(reszty)
+qqline(reszty, col = "red", lwd = 2)
+dev.off()
+
+```
+
