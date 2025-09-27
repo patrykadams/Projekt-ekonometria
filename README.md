@@ -48,4 +48,4 @@ W projekcie byłem odpowiedzialny za:
 
 ---
 
-✍️ Autorzy: *[tutaj wpisz imiona/nazwiska zespołu]*
+✍️ Autorzy: *Patryk Adamski, Olgierd D., Maksymilian B.*
